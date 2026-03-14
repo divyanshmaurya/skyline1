@@ -51,6 +51,21 @@ const Chatbot: React.FC = () => {
     }
   }, [messages, isLoading, isVoiceActive]);
 
+  const computeDealProbability = (data: ChatSessionData): number => {
+    let score = 0;
+    if (data.intent) score += 2;
+    if (data.location) score += 1;
+    if (data.budget) score += 2;
+    if (data.timeline) {
+      const urgent = /\b(immediate|asap|now|soon|this month|this week|1 month|2 month|3 month|quickly)\b/i.test(data.timeline);
+      score += urgent ? 2 : 1;
+    }
+    if (data.phone) score += 1;
+    if (data.email) score += 1;
+    if (data.bestTime) score += 1;
+    return Math.min(10, score);
+  };
+
   const triggerAgentNotification = (data: ChatSessionData) => {
     console.log('AGENT NOTIFICATION PAYLOAD:', data);
 
@@ -63,6 +78,8 @@ const Chatbot: React.FC = () => {
       return;
     }
 
+    const probability = computeDealProbability(data);
+
     emailjs.send(serviceId, templateId, {
       to_email: 'divyansh.ku@gmail.com',
       lead_name: data.name || 'Not provided',
@@ -74,6 +91,7 @@ const Chatbot: React.FC = () => {
       timeline: data.timeline || 'Not specified',
       contact_preference: data.contactPreference || 'Not specified',
       best_time: data.bestTime || 'Not specified',
+      deal_probability: `${probability}/10`,
     }, publicKey).then(
       () => console.log('Lead notification email sent successfully.'),
       (err) => console.error('Failed to send lead notification email:', err)
@@ -90,26 +108,22 @@ const Chatbot: React.FC = () => {
     try {
       const response = await gemini.processMessage(userText, stage, sessionData, messages);
       
+      const mergedData = { ...sessionData, ...response.extractedData };
+
       // Update session data with extracted info
       if (response.extractedData) {
-        setSessionData(prev => ({ ...prev, ...response.extractedData }));
-      }
-
-      // Hard Recovery Logic for Phone
-      if (stage === ChatStage.LEAD_CAPTURE_CONTACT && !response.extractedData?.phone && !sessionData.phone) {
-        setPhoneRefusalCount(prev => prev + 1);
-        if (phoneRefusalCount >= 0) { // On first refusal or unclear response
-           // The AI should handle this via SYSTEM_INSTRUCTION, but we can reinforce it
-        }
+        setSessionData(mergedData);
       }
 
       setMessages(prev => [...prev, { role: 'model', text: response.message }]);
-      
+
+      // Fire email as soon as bestTime is captured for the first time
+      if (response.extractedData?.bestTime && !sessionData.bestTime) {
+        triggerAgentNotification(mergedData);
+      }
+
       if (response.nextStage) {
         setStage(response.nextStage);
-        if (response.nextStage === ChatStage.COMPLETE) {
-          triggerAgentNotification({ ...sessionData, ...response.extractedData });
-        }
       }
     } catch (error) {
       console.error("Chat Error:", error);
@@ -199,13 +213,17 @@ const Chatbot: React.FC = () => {
                 if (call.name === 'updateLeadInfo') {
                   const args = call.args as any;
                   if (args.extractedData) {
-                    setSessionData(prev => ({ ...prev, ...args.extractedData }));
+                    setSessionData(prev => {
+                      const merged = { ...prev, ...args.extractedData };
+                      // Fire email as soon as bestTime is captured for the first time
+                      if (args.extractedData.bestTime && !prev.bestTime) {
+                        triggerAgentNotification(merged);
+                      }
+                      return merged;
+                    });
                   }
                   if (args.nextStage) {
                     setStage(args.nextStage as ChatStage);
-                    if (args.nextStage === ChatStage.COMPLETE) {
-                      triggerAgentNotification({ ...sessionData, ...args.extractedData });
-                    }
                   }
                   // Send response back to model
                   sessionPromise.then(session => {
