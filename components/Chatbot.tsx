@@ -82,7 +82,7 @@ const Chatbot: React.FC = () => {
     const probability = computeDealProbability(data);
 
     emailjs.send(serviceId, templateId, {
-      to_email: 'divyansh.ku@gmail.com',
+      to_email: 'subnest.ai@gmail.com',
       lead_name: data.name || 'Not provided',
       lead_email: data.email || 'Not provided',
       lead_phone: data.phone || 'Not provided',
