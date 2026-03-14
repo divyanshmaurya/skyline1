@@ -21,6 +21,7 @@ const Chatbot: React.FC = () => {
   const [phoneRefusalCount, setPhoneRefusalCount] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isSendingRef = useRef(false);
 
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -99,14 +100,18 @@ const Chatbot: React.FC = () => {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isSendingRef.current) return;
+    isSendingRef.current = true;
     const userText = input;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
     try {
-      const response = await gemini.processMessage(userText, stage, sessionData, messages);
+      // Skip messages[0] (hardcoded initial greeting) — it was never sent to Gemini,
+      // so including it causes Gemini to echo/repeat it in its next response.
+      const historyForApi = messages.slice(1);
+      const response = await gemini.processMessage(userText, stage, sessionData, historyForApi);
       
       const mergedData = { ...sessionData, ...response.extractedData };
 
@@ -130,6 +135,7 @@ const Chatbot: React.FC = () => {
       setMessages(prev => [...prev, { role: 'model', text: "I'm sorry, I encountered an error. Please try again." }]);
     } finally {
       setIsLoading(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -387,7 +393,7 @@ const Chatbot: React.FC = () => {
                   type="text" 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); } }}
                   placeholder={isVoiceActive ? "Tell me your preferences..." : "Ask our advisor..."}
                   className="flex-1 bg-transparent text-sm px-2 focus:outline-none text-slate-900 font-semibold placeholder:text-slate-400"
                 />
