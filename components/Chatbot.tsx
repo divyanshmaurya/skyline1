@@ -5,6 +5,7 @@ import { gemini, GeminiService } from '../services/gemini';
 import { SYSTEM_INSTRUCTION, CHATBOT_FLOW_INSTRUCTION, VOICE_FLOW_INSTRUCTION } from '../constants';
 import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { ChatStage, ChatSessionData, ChatMessage } from '../types';
+import emailjs from '@emailjs/browser';
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,7 +53,31 @@ const Chatbot: React.FC = () => {
 
   const triggerAgentNotification = (data: ChatSessionData) => {
     console.log('AGENT NOTIFICATION PAYLOAD:', data);
-    // In a real app, this would be an API call to a backend or CRM
+
+    const serviceId = (import.meta as any).env?.VITE_EMAILJS_SERVICE_ID;
+    const templateId = (import.meta as any).env?.VITE_EMAILJS_TEMPLATE_ID;
+    const publicKey = (import.meta as any).env?.VITE_EMAILJS_PUBLIC_KEY;
+
+    if (!serviceId || !templateId || !publicKey) {
+      console.warn('EmailJS is not configured. Skipping email notification.');
+      return;
+    }
+
+    emailjs.send(serviceId, templateId, {
+      to_email: 'divyansh.ku@gmail.com',
+      lead_name: data.name || 'Not provided',
+      lead_email: data.email || 'Not provided',
+      lead_phone: data.phone || 'Not provided',
+      intent: data.intent || 'Not specified',
+      budget: data.budget || 'Not specified',
+      location: data.location || 'Not specified',
+      timeline: data.timeline || 'Not specified',
+      contact_preference: data.contactPreference || 'Not specified',
+      best_time: data.bestTime || 'Not specified',
+    }, publicKey).then(
+      () => console.log('Lead notification email sent successfully.'),
+      (err) => console.error('Failed to send lead notification email:', err)
+    );
   };
 
   const handleSend = async () => {
