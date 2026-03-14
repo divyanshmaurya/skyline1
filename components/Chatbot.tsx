@@ -5,6 +5,7 @@ import { gemini, GeminiService } from '../services/gemini';
 import { SYSTEM_INSTRUCTION, CHATBOT_FLOW_INSTRUCTION, VOICE_FLOW_INSTRUCTION } from '../constants';
 import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { ChatStage, ChatSessionData, ChatMessage } from '../types';
+import emailjs from '@emailjs/browser';
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,6 +21,7 @@ const Chatbot: React.FC = () => {
   const [phoneRefusalCount, setPhoneRefusalCount] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isSendingRef = useRef(false);
 
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -50,47 +52,90 @@ const Chatbot: React.FC = () => {
     }
   }, [messages, isLoading, isVoiceActive]);
 
+  const computeDealProbability = (data: ChatSessionData): number => {
+    let score = 0;
+    if (data.intent) score += 2;
+    if (data.location) score += 1;
+    if (data.budget) score += 2;
+    if (data.timeline) {
+      const urgent = /\b(immediate|asap|now|soon|this month|this week|1 month|2 month|3 month|quickly)\b/i.test(data.timeline);
+      score += urgent ? 2 : 1;
+    }
+    if (data.phone) score += 1;
+    if (data.email) score += 1;
+    if (data.bestTime) score += 1;
+    return Math.min(10, score);
+  };
+
   const triggerAgentNotification = (data: ChatSessionData) => {
     console.log('AGENT NOTIFICATION PAYLOAD:', data);
-    // In a real app, this would be an API call to a backend or CRM
+
+    const serviceId = (import.meta as any).env?.VITE_EMAILJS_SERVICE_ID;
+    const templateId = (import.meta as any).env?.VITE_EMAILJS_TEMPLATE_ID;
+    const publicKey = (import.meta as any).env?.VITE_EMAILJS_PUBLIC_KEY;
+
+    if (!serviceId || !templateId || !publicKey) {
+      console.warn('EmailJS is not configured. Skipping email notification.');
+      return;
+    }
+
+    const probability = computeDealProbability(data);
+
+    emailjs.send(serviceId, templateId, {
+      to_email: 'subnest.ai@gmail.com',
+      lead_name: data.name || 'Not provided',
+      lead_email: data.email || 'Not provided',
+      lead_phone: data.phone || 'Not provided',
+      intent: data.intent || 'Not specified',
+      budget: data.budget || 'Not specified',
+      location: data.location || 'Not specified',
+      timeline: data.timeline || 'Not specified',
+      contact_preference: data.contactPreference || 'Not specified',
+      best_time: data.bestTime || 'Not specified',
+      deal_probability: `${probability}/10`,
+    }, publicKey).then(
+      () => console.log('Lead notification email sent successfully.'),
+      (err) => console.error('Failed to send lead notification email:', err)
+    );
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isSendingRef.current) return;
+    isSendingRef.current = true;
     const userText = input;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
     try {
-      const response = await gemini.processMessage(userText, stage, sessionData, messages);
+      // Skip messages[0] (hardcoded initial greeting) — it was never sent to Gemini,
+      // so including it causes Gemini to echo/repeat it in its next response.
+      const historyForApi = messages.slice(1);
+      const response = await gemini.processMessage(userText, stage, sessionData, historyForApi);
       
+      const mergedData = { ...sessionData, ...response.extractedData };
+
       // Update session data with extracted info
       if (response.extractedData) {
-        setSessionData(prev => ({ ...prev, ...response.extractedData }));
-      }
-
-      // Hard Recovery Logic for Phone
-      if (stage === ChatStage.LEAD_CAPTURE_CONTACT && !response.extractedData?.phone && !sessionData.phone) {
-        setPhoneRefusalCount(prev => prev + 1);
-        if (phoneRefusalCount >= 0) { // On first refusal or unclear response
-           // The AI should handle this via SYSTEM_INSTRUCTION, but we can reinforce it
-        }
+        setSessionData(mergedData);
       }
 
       setMessages(prev => [...prev, { role: 'model', text: response.message }]);
-      
+
+      // Fire email as soon as bestTime is captured for the first time
+      if (response.extractedData?.bestTime && !sessionData.bestTime) {
+        triggerAgentNotification(mergedData);
+      }
+
       if (response.nextStage) {
         setStage(response.nextStage);
-        if (response.nextStage === ChatStage.COMPLETE) {
-          triggerAgentNotification({ ...sessionData, ...response.extractedData });
-        }
       }
     } catch (error) {
       console.error("Chat Error:", error);
       setMessages(prev => [...prev, { role: 'model', text: "I'm sorry, I encountered an error. Please try again." }]);
     } finally {
       setIsLoading(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -174,13 +219,17 @@ const Chatbot: React.FC = () => {
                 if (call.name === 'updateLeadInfo') {
                   const args = call.args as any;
                   if (args.extractedData) {
-                    setSessionData(prev => ({ ...prev, ...args.extractedData }));
+                    setSessionData(prev => {
+                      const merged = { ...prev, ...args.extractedData };
+                      // Fire email as soon as bestTime is captured for the first time
+                      if (args.extractedData.bestTime && !prev.bestTime) {
+                        triggerAgentNotification(merged);
+                      }
+                      return merged;
+                    });
                   }
                   if (args.nextStage) {
                     setStage(args.nextStage as ChatStage);
-                    if (args.nextStage === ChatStage.COMPLETE) {
-                      triggerAgentNotification({ ...sessionData, ...args.extractedData });
-                    }
                   }
                   // Send response back to model
                   sessionPromise.then(session => {
@@ -344,7 +393,7 @@ const Chatbot: React.FC = () => {
                   type="text" 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); } }}
                   placeholder={isVoiceActive ? "Tell me your preferences..." : "Ask our advisor..."}
                   className="flex-1 bg-transparent text-sm px-2 focus:outline-none text-slate-900 font-semibold placeholder:text-slate-400"
                 />
