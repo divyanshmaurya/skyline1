@@ -1,0 +1,7 @@
+{
+  "name": "Skyline Elite Realty",
+  "description": "Premier luxury real estate services specializing in iconic Manhattan penthouses, historic Brooklyn townhouses, and strategic commercial investments in New York City.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
