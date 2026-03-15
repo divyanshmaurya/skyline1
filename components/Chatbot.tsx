@@ -5,7 +5,6 @@ import { gemini, GeminiService } from '../services/gemini';
 import { SYSTEM_INSTRUCTION, CHATBOT_FLOW_INSTRUCTION, VOICE_FLOW_INSTRUCTION } from '../constants';
 import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { ChatStage, ChatSessionData, ChatMessage } from '../types';
-import emailjs from '@emailjs/browser';
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -73,33 +72,77 @@ const Chatbot: React.FC = () => {
   const triggerAgentNotification = (data: ChatSessionData) => {
     console.log('AGENT NOTIFICATION PAYLOAD:', data);
 
-    const serviceId = (import.meta as any).env?.VITE_EMAILJS_SERVICE_ID;
-    const templateId = (import.meta as any).env?.VITE_EMAILJS_TEMPLATE_ID;
-    const publicKey = (import.meta as any).env?.VITE_EMAILJS_PUBLIC_KEY;
+    const score = computeDealProbability(data);
+    const scoreLabel =
+      score >= 8 ? '🔥 HOT LEAD'
+      : score >= 5 ? '⚡ WARM LEAD'
+      : '❄️ COLD LEAD';
 
-    if (!serviceId || !templateId || !publicKey) {
-      console.warn('EmailJS is not configured. Skipping email notification.');
-      return;
-    }
+    const intentExtras =
+      data.intent === 'Rent'
+        ? `Bedrooms: ${data.bedrooms || 'Not specified'}`
+        : data.intent === 'Buy'
+        ? `Financing Status: ${data.financingStatus || 'Not specified'}`
+        : data.intent === 'Sell'
+        ? `Zip Code: ${data.zipCode || 'Not specified'}`
+        : '';
 
-    const probability = computeDealProbability(data);
+    const emailBody = [
+      `=== NEW LEAD — SKYLINE ELITE REALTY ===`,
+      ``,
+      `LEAD SCORE: ${score}/10  ${scoreLabel}`,
+      ``,
+      `--- CUSTOMER DETAILS ---`,
+      `Name:               ${data.name || 'Not provided'}`,
+      `Phone:              ${data.phone || 'Not provided'}`,
+      `Email:              ${data.email || 'Not provided'}`,
+      ``,
+      `--- REAL ESTATE INTENT ---`,
+      `Intent:             ${data.intent || 'Not specified'}`,
+      `Location:           ${data.location || 'Not specified'}`,
+      `Budget:             ${data.budget || 'Not specified'}`,
+      `Timeline:           ${data.timeline || 'Not specified'}`,
+      intentExtras ? intentExtras : null,
+      `Listing Preference: ${data.listingPreference || 'Not specified'}`,
+      ``,
+      `--- CONTACT PREFERENCE ---`,
+      `Preferred Method:   ${data.contactPreference || 'Not specified'}`,
+      `Best Time to Call:  ${data.bestTime || 'Not specified'}`,
+      ``,
+      `--- SCORING BREAKDOWN ---`,
+      `Intent provided:    ${data.intent ? '+2' : '0'}`,
+      `Location provided:  ${data.location ? '+1' : '0'}`,
+      `Budget provided:    ${data.budget ? '+2' : '0'}`,
+      `Timeline urgency:   ${data.timeline ? (/\b(immediate|asap|now|soon|this month|this week|1 month|2 month|3 month|quickly)\b/i.test(data.timeline) ? '+2 (urgent)' : '+1') : '0'}`,
+      `Phone provided:     ${data.phone ? '+1' : '0'}`,
+      `Email provided:     ${data.email ? '+1' : '0'}`,
+      `Best time given:    ${data.bestTime ? '+1' : '0'}`,
+      `TOTAL:              ${score}/10`,
+    ].filter(line => line !== null).join('\n');
 
-    emailjs.send(serviceId, templateId, {
-      to_email: 'subnest.ai@gmail.com',
-      lead_name: data.name || 'Not provided',
-      lead_email: data.email || 'Not provided',
-      lead_phone: data.phone || 'Not provided',
-      intent: data.intent || 'Not specified',
-      budget: data.budget || 'Not specified',
-      location: data.location || 'Not specified',
-      timeline: data.timeline || 'Not specified',
-      contact_preference: data.contactPreference || 'Not specified',
-      best_time: data.bestTime || 'Not specified',
-      deal_probability: `${probability}/10`,
-    }, publicKey).then(
-      () => console.log('Lead notification email sent successfully.'),
-      (err) => console.error('Failed to send lead notification email:', err)
-    );
+    fetch('https://formsubmit.co/ajax/subnest.ai@gmail.com', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        _subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
+        name: data.name || 'Not provided',
+        phone: data.phone || 'Not provided',
+        email: data.email || 'Not provided',
+        lead_score: `${score}/10 — ${scoreLabel}`,
+        intent: data.intent || 'Not specified',
+        location: data.location || 'Not specified',
+        budget: data.budget || 'Not specified',
+        timeline: data.timeline || 'Not specified',
+        contact_preference: data.contactPreference || 'Not specified',
+        best_time_to_contact: data.bestTime || 'Not specified',
+        additional_details: intentExtras || 'N/A',
+        full_summary: emailBody,
+        _template: 'table',
+      }),
+    })
+      .then(res => res.json())
+      .then(() => console.log('Lead notification email sent successfully.'))
+      .catch(err => console.error('Failed to send lead notification email:', err));
   };
 
   const handleSend = async () => {
