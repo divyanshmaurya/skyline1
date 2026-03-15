@@ -393,7 +393,7 @@ const Chatbot: React.FC = () => {
               <div
                 className="h-full bg-blue-500 transition-all duration-500 ease-out"
                 style={{
-                  width: `${(Object.values(ChatStage).indexOf(stage) + 1) / Object.values(ChatStage).length * 100}%`
+                  width: stage === ChatStage.POST_COMPLETE ? '100%' : `${(Object.values(ChatStage).indexOf(stage) + 1) / (Object.values(ChatStage).length - 1) * 100}%`
                 }}
               />
             </div>
