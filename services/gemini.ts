@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION, CHATBOT_FLOW_INSTRUCTION } from "../constants";
 import { ChatStage, ChatSessionData, GeminiResponse } from "../types";
@@ -15,8 +14,8 @@ export class GeminiService {
   }
 
   async processMessage(
-    message: string, 
-    currentStage: ChatStage, 
+    message: string,
+    currentStage: ChatStage,
     sessionData: ChatSessionData,
     history: { role: 'user' | 'model', text: string }[] = []
   ): Promise<GeminiResponse> {
@@ -28,9 +27,9 @@ export class GeminiService {
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      
+
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         contents: [
           ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })),
           { role: 'user', parts: [{ text: `Current Stage: ${currentStage}\nCurrent Session Data: ${JSON.stringify(sessionData)}\nUser Message: ${message}` }] }
@@ -60,7 +59,7 @@ export class GeminiService {
                   bestTime: { type: Type.STRING },
                 }
               },
-              nextStage: { 
+              nextStage: {
                 type: Type.STRING
               },
               fallback: { type: Type.BOOLEAN }
@@ -86,7 +85,7 @@ export class GeminiService {
       } else if (text.startsWith("```")) {
         text = text.replace(/^```\n?/, "").replace(/\n?```$/, "");
       }
-      
+
       const result = JSON.parse(text.trim());
       return {
         message: result.message || "I'm sorry, I'm having trouble processing that.",
@@ -97,7 +96,7 @@ export class GeminiService {
     } catch (error: any) {
       console.error("Gemini Process Error Details:", error);
       let errorMessage = "I apologize, but I encountered an error. Please try again or contact us directly.";
-      
+
       if (error?.message === "API_KEY_MISSING") {
         errorMessage = "I apologize, but the AI service is not configured correctly. Please check the API key.";
       } else if (error?.message === "EMPTY_RESPONSE") {
@@ -107,9 +106,9 @@ export class GeminiService {
       } else if (error?.status === 403) {
         errorMessage = "I apologize, but there is a permission issue with the AI service. Please check the API key and project settings.";
       }
-      
+
       console.error("Final Error Message for UI:", errorMessage);
-      
+
       return {
         message: errorMessage,
         nextStage: currentStage
@@ -118,7 +117,6 @@ export class GeminiService {
   }
 
   async sendMessage(message: string, history: any[] = []) {
-    // Keeping this for backward compatibility or simple messages
     try {
       const apiKey = this.getApiKey();
       if (!apiKey) {
@@ -128,7 +126,7 @@ export class GeminiService {
 
       const ai = new GoogleGenAI({ apiKey });
       const chat = ai.chats.create({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
         },
@@ -142,7 +140,6 @@ export class GeminiService {
     }
   }
 
-  // Helper for voice decoding as per guidelines
   static decodeBase64(base64: string): Uint8Array {
     const binaryString = atob(base64);
     const len = binaryString.length;

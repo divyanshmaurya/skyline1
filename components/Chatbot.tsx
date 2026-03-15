@@ -5,14 +5,13 @@ import { gemini, GeminiService } from '../services/gemini';
 import { SYSTEM_INSTRUCTION, CHATBOT_FLOW_INSTRUCTION, VOICE_FLOW_INSTRUCTION } from '../constants';
 import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { ChatStage, ChatSessionData, ChatMessage } from '../types';
-import emailjs from '@emailjs/browser';
 
 const Chatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [stage, setStage] = useState<ChatStage>(ChatStage.WELCOME);
   const [sessionData, setSessionData] = useState<ChatSessionData>({});
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', text: 'Hi! I’m your real estate AI assistant. I can help you buy, rent, or sell... Are you looking to buy, rent, or sell today?' }
+    { role: 'model', text: 'Hi! I\u2019m your real estate AI assistant. I can help you buy, rent, or sell... Are you looking to buy, rent, or sell today?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,9 +24,12 @@ const Chatbot: React.FC = () => {
 
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputCtxRef = useRef<AudioContext | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  
+
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
 
@@ -70,33 +72,86 @@ const Chatbot: React.FC = () => {
   const triggerAgentNotification = (data: ChatSessionData) => {
     console.log('AGENT NOTIFICATION PAYLOAD:', data);
 
-    const serviceId = (import.meta as any).env?.VITE_EMAILJS_SERVICE_ID;
-    const templateId = (import.meta as any).env?.VITE_EMAILJS_TEMPLATE_ID;
-    const publicKey = (import.meta as any).env?.VITE_EMAILJS_PUBLIC_KEY;
+    const score = computeDealProbability(data);
+    const scoreLabel =
+      score >= 8 ? '🔥 HOT LEAD'
+      : score >= 5 ? '⚡ WARM LEAD'
+      : '❄️ COLD LEAD';
 
-    if (!serviceId || !templateId || !publicKey) {
-      console.warn('EmailJS is not configured. Skipping email notification.');
+    const intentExtras =
+      data.intent === 'Rent'
+        ? `Bedrooms: ${data.bedrooms || 'Not specified'}`
+        : data.intent === 'Buy'
+        ? `Financing Status: ${data.financingStatus || 'Not specified'}`
+        : data.intent === 'Sell'
+        ? `Zip Code: ${data.zipCode || 'Not specified'}`
+        : '';
+
+    const emailBody = [
+      `=== NEW LEAD — SKYLINE ELITE REALTY ===`,
+      ``,
+      `LEAD SCORE: ${score}/10  ${scoreLabel}`,
+      ``,
+      `--- CUSTOMER DETAILS ---`,
+      `Name:               ${data.name || 'Not provided'}`,
+      `Phone:              ${data.phone || 'Not provided'}`,
+      `Email:              ${data.email || 'Not provided'}`,
+      ``,
+      `--- REAL ESTATE INTENT ---`,
+      `Intent:             ${data.intent || 'Not specified'}`,
+      `Location:           ${data.location || 'Not specified'}`,
+      `Budget:             ${data.budget || 'Not specified'}`,
+      `Timeline:           ${data.timeline || 'Not specified'}`,
+      intentExtras ? intentExtras : null,
+      `Listing Preference: ${data.listingPreference || 'Not specified'}`,
+      ``,
+      `--- CONTACT PREFERENCE ---`,
+      `Preferred Method:   ${data.contactPreference || 'Not specified'}`,
+      `Best Time to Call:  ${data.bestTime || 'Not specified'}`,
+      ``,
+      `--- SCORING BREAKDOWN ---`,
+      `Intent provided:    ${data.intent ? '+2' : '0'}`,
+      `Location provided:  ${data.location ? '+1' : '0'}`,
+      `Budget provided:    ${data.budget ? '+2' : '0'}`,
+      `Timeline urgency:   ${data.timeline ? (/\b(immediate|asap|now|soon|this month|this week|1 month|2 month|3 month|quickly)\b/i.test(data.timeline) ? '+2 (urgent)' : '+1') : '0'}`,
+      `Phone provided:     ${data.phone ? '+1' : '0'}`,
+      `Email provided:     ${data.email ? '+1' : '0'}`,
+      `Best time given:    ${data.bestTime ? '+1' : '0'}`,
+      `TOTAL:              ${score}/10`,
+    ].filter(line => line !== null).join('\n');
+
+    const accessKey = (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    if (!accessKey) {
+      console.warn('Web3Forms access key not configured (VITE_WEB3FORMS_KEY). Skipping email.');
       return;
     }
 
-    const probability = computeDealProbability(data);
-
-    emailjs.send(serviceId, templateId, {
-      to_email: 'subnest.ai@gmail.com',
-      lead_name: data.name || 'Not provided',
-      lead_email: data.email || 'Not provided',
-      lead_phone: data.phone || 'Not provided',
-      intent: data.intent || 'Not specified',
-      budget: data.budget || 'Not specified',
-      location: data.location || 'Not specified',
-      timeline: data.timeline || 'Not specified',
-      contact_preference: data.contactPreference || 'Not specified',
-      best_time: data.bestTime || 'Not specified',
-      deal_probability: `${probability}/10`,
-    }, publicKey).then(
-      () => console.log('Lead notification email sent successfully.'),
-      (err) => console.error('Failed to send lead notification email:', err)
-    );
+    fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        access_key: accessKey,
+        subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
+        name: data.name || 'Not provided',
+        phone: data.phone || 'Not provided',
+        email: data.email || 'Not provided',
+        lead_score: `${score}/10 — ${scoreLabel}`,
+        intent: data.intent || 'Not specified',
+        location: data.location || 'Not specified',
+        budget: data.budget || 'Not specified',
+        timeline: data.timeline || 'Not specified',
+        contact_preference: data.contactPreference || 'Not specified',
+        best_time_to_contact: data.bestTime || 'Not specified',
+        additional_details: intentExtras || 'N/A',
+        message: emailBody,
+      }),
+    })
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) console.log('Lead notification email sent successfully.');
+        else console.error('Web3Forms error:', res);
+      })
+      .catch(err => console.error('Failed to send lead notification email:', err));
   };
 
   const handleSend = async () => {
@@ -112,7 +167,7 @@ const Chatbot: React.FC = () => {
       // so including it causes Gemini to echo/repeat it in its next response.
       const historyForApi = messages.slice(1);
       const response = await gemini.processMessage(userText, stage, sessionData, historyForApi);
-      
+
       const mergedData = { ...sessionData, ...response.extractedData };
 
       // Update session data with extracted info
@@ -148,10 +203,12 @@ const Chatbot: React.FC = () => {
       setIsLoading(true);
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || ((import.meta as any).env?.VITE_GEMINI_API_KEY as string);
       if (!apiKey) throw new Error("API Key missing");
-      
+
       const ai = new GoogleGenAI({ apiKey });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      inputCtxRef.current = inputCtx;
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       audioContextRef.current = outputCtx;
       currentInputTranscription.current = '';
@@ -198,7 +255,9 @@ const Chatbot: React.FC = () => {
             setIsLoading(false);
             const source = inputCtx.createMediaStreamSource(stream);
             const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
+            scriptProcessorRef.current = scriptProcessor;
             scriptProcessor.onaudioprocess = (e) => {
+              if (!sessionRef.current) return;
               const inputData = e.inputBuffer.getChannelData(0);
               const l = inputData.length;
               const int16 = new Int16Array(l);
@@ -207,7 +266,7 @@ const Chatbot: React.FC = () => {
                 data: GeminiService.encodeBase64(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
-              sessionPromise.then((session) => { if (session) session.sendRealtimeInput({ media: pcmBlob }); });
+              try { sessionRef.current.sendRealtimeInput({ media: pcmBlob }); } catch(e) {}
             };
             source.connect(scriptProcessor);
             scriptProcessor.connect(inputCtx.destination);
@@ -232,17 +291,17 @@ const Chatbot: React.FC = () => {
                     setStage(args.nextStage as ChatStage);
                   }
                   // Send response back to model
-                  sessionPromise.then(session => {
-                    if (session) {
-                      session.sendToolResponse({
+                  if (sessionRef.current) {
+                    try {
+                      sessionRef.current.sendToolResponse({
                         functionResponses: [{
                           name: 'updateLeadInfo',
                           id: call.id,
                           response: { result: 'success' }
                         }]
                       });
-                    }
-                  });
+                    } catch(e) {}
+                  }
                 }
               }
             }
@@ -283,7 +342,7 @@ const Chatbot: React.FC = () => {
             }
           },
           onerror: (e) => { stopVoiceSession(); },
-          onclose: () => { setIsVoiceActive(false); },
+          onclose: () => { stopVoiceSession(); },
         },
         config: {
           responseModalities: [Modality.AUDIO],
@@ -302,6 +361,9 @@ const Chatbot: React.FC = () => {
   };
 
   const stopVoiceSession = () => {
+    if (scriptProcessorRef.current) { try { scriptProcessorRef.current.disconnect(); } catch(e) {} scriptProcessorRef.current = null; }
+    if (inputCtxRef.current) { try { inputCtxRef.current.close(); } catch(e) {} inputCtxRef.current = null; }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
     if (sessionRef.current) { try { sessionRef.current.close(); } catch (e) {} sessionRef.current = null; }
     sourcesRef.current.forEach(source => { try { source.stop(); } catch (e) {} });
     sourcesRef.current.clear();
@@ -337,10 +399,10 @@ const Chatbot: React.FC = () => {
           {/* Progress Bar */}
           <div className="bg-slate-900 px-5 py-2 flex items-center space-x-2 border-t border-white/5">
             <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-blue-500 transition-all duration-500 ease-out"
-                style={{ 
-                  width: `${(Object.values(ChatStage).indexOf(stage) + 1) / Object.values(ChatStage).length * 100}%` 
+                style={{
+                  width: stage === ChatStage.POST_COMPLETE ? '100%' : `${(Object.values(ChatStage).indexOf(stage) + 1) / (Object.values(ChatStage).length - 1) * 100}%`
                 }}
               />
             </div>
@@ -353,8 +415,8 @@ const Chatbot: React.FC = () => {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
                 <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  m.role === 'user' 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10 rounded-br-none' 
+                  m.role === 'user'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/10 rounded-br-none'
                     : 'bg-white text-slate-800 border border-slate-200 shadow-sm rounded-bl-none font-medium'
                 }`}>
                   {m.text}
@@ -380,7 +442,7 @@ const Chatbot: React.FC = () => {
 
           <div className="p-4 bg-white border-t border-slate-100 space-y-3">
             <div className="flex items-center space-x-2">
-              <button 
+              <button
                 onClick={startVoiceSession}
                 className={`p-3 rounded-2xl transition-all shadow-lg active:scale-90 flex-shrink-0 ${
                   isVoiceActive ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600'
@@ -389,15 +451,15 @@ const Chatbot: React.FC = () => {
                 {isVoiceActive ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>
               <div className="flex-1 flex items-center bg-slate-100 px-3 py-2 rounded-2xl border border-transparent focus-within:border-blue-500/50 focus-within:bg-white transition-all shadow-inner">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSend(); } }}
                   placeholder={isVoiceActive ? "Tell me your preferences..." : "Ask our advisor..."}
                   className="flex-1 bg-transparent text-sm px-2 focus:outline-none text-slate-900 font-semibold placeholder:text-slate-400"
                 />
-                <button 
+                <button
                   onClick={handleSend}
                   disabled={isLoading || !input.trim()}
                   className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-30"
@@ -410,7 +472,7 @@ const Chatbot: React.FC = () => {
         </div>
       )}
 
-      <button 
+      <button
         onClick={() => { if (isOpen && isVoiceActive) stopVoiceSession(); setIsOpen(!isOpen); }}
         className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 group ${
           isOpen ? 'bg-slate-950 text-white' : 'bg-blue-600 text-white'
