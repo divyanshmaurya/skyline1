@@ -120,11 +120,18 @@ const Chatbot: React.FC = () => {
       `TOTAL:              ${score}/10`,
     ].filter(line => line !== null).join('\n');
 
-    fetch('https://formsubmit.co/ajax/subnest.ai@gmail.com', {
+    const accessKey = (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    if (!accessKey) {
+      console.warn('Web3Forms access key not configured (VITE_WEB3FORMS_KEY). Skipping email.');
+      return;
+    }
+
+    fetch('https://api.web3forms.com/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        _subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
+        access_key: accessKey,
+        subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
         name: data.name || 'Not provided',
         phone: data.phone || 'Not provided',
         email: data.email || 'Not provided',
@@ -136,12 +143,14 @@ const Chatbot: React.FC = () => {
         contact_preference: data.contactPreference || 'Not specified',
         best_time_to_contact: data.bestTime || 'Not specified',
         additional_details: intentExtras || 'N/A',
-        full_summary: emailBody,
-        _template: 'table',
+        message: emailBody,
       }),
     })
       .then(res => res.json())
-      .then(() => console.log('Lead notification email sent successfully.'))
+      .then(res => {
+        if (res.success) console.log('Lead notification email sent successfully.');
+        else console.error('Web3Forms error:', res);
+      })
       .catch(err => console.error('Failed to send lead notification email:', err));
   };
 
