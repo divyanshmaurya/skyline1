@@ -25,6 +25,9 @@ const Chatbot: React.FC = () => {
 
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputCtxRef = useRef<AudioContext | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   
@@ -151,7 +154,9 @@ const Chatbot: React.FC = () => {
       
       const ai = new GoogleGenAI({ apiKey });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      inputCtxRef.current = inputCtx;
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       audioContextRef.current = outputCtx;
       currentInputTranscription.current = '';
@@ -198,7 +203,9 @@ const Chatbot: React.FC = () => {
             setIsLoading(false);
             const source = inputCtx.createMediaStreamSource(stream);
             const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
+            scriptProcessorRef.current = scriptProcessor;
             scriptProcessor.onaudioprocess = (e) => {
+              if (!sessionRef.current) return;
               const inputData = e.inputBuffer.getChannelData(0);
               const l = inputData.length;
               const int16 = new Int16Array(l);
@@ -207,7 +214,7 @@ const Chatbot: React.FC = () => {
                 data: GeminiService.encodeBase64(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
-              sessionPromise.then((session) => { if (session) session.sendRealtimeInput({ media: pcmBlob }); });
+              try { sessionRef.current.sendRealtimeInput({ media: pcmBlob }); } catch(e) {}
             };
             source.connect(scriptProcessor);
             scriptProcessor.connect(inputCtx.destination);
@@ -232,17 +239,17 @@ const Chatbot: React.FC = () => {
                     setStage(args.nextStage as ChatStage);
                   }
                   // Send response back to model
-                  sessionPromise.then(session => {
-                    if (session) {
-                      session.sendToolResponse({
+                  if (sessionRef.current) {
+                    try {
+                      sessionRef.current.sendToolResponse({
                         functionResponses: [{
                           name: 'updateLeadInfo',
                           id: call.id,
                           response: { result: 'success' }
                         }]
                       });
-                    }
-                  });
+                    } catch(e) {}
+                  }
                 }
               }
             }
@@ -283,7 +290,7 @@ const Chatbot: React.FC = () => {
             }
           },
           onerror: (e) => { stopVoiceSession(); },
-          onclose: () => { setIsVoiceActive(false); },
+          onclose: () => { stopVoiceSession(); },
         },
         config: {
           responseModalities: [Modality.AUDIO],
@@ -302,6 +309,9 @@ const Chatbot: React.FC = () => {
   };
 
   const stopVoiceSession = () => {
+    if (scriptProcessorRef.current) { try { scriptProcessorRef.current.disconnect(); } catch(e) {} scriptProcessorRef.current = null; }
+    if (inputCtxRef.current) { try { inputCtxRef.current.close(); } catch(e) {} inputCtxRef.current = null; }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
     if (sessionRef.current) { try { sessionRef.current.close(); } catch (e) {} sessionRef.current = null; }
     sourcesRef.current.forEach(source => { try { source.stop(); } catch (e) {} });
     sourcesRef.current.clear();
