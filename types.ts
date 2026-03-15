@@ -50,7 +50,7 @@ export interface ChatSessionData {
   bestTime?: string;
 }
 
-export interface GeminiResponse {
+export interface ChatResponse {
   message: string;
   extractedData?: Partial<ChatSessionData>;
   nextStage?: ChatStage;
