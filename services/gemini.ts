@@ -29,13 +29,12 @@ export class GeminiService {
       const ai = new GoogleGenAI({ apiKey });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: [
           ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })),
           { role: 'user', parts: [{ text: `Current Stage: ${currentStage}\nCurrent Session Data: ${JSON.stringify(sessionData)}\nUser Message: ${message}` }] }
         ],
         config: {
-          thinkingConfig: { thinkingBudget: 0 },
           systemInstruction: CHATBOT_FLOW_INSTRUCTION + "\n\nIMPORTANT: You must return a valid JSON object. Do not include any markdown formatting in your response.",
           responseMimeType: "application/json",
           responseSchema: {
@@ -74,27 +73,10 @@ export class GeminiService {
         throw new Error("EMPTY_RESPONSE");
       }
 
-      // gemini-2.5-flash is a thinking model — it returns thought parts alongside
-      // the actual response. Exclude thought parts and take the JSON text part.
-      const parts = response.candidates[0].content.parts;
-      const jsonPart = parts.find(p => p.text && !p.thought && p.text.trim().startsWith('{'));
-      let text = jsonPart?.text ?? parts.find(p => p.text && !p.thought)?.text ?? "{}";
-      // Clean up markdown if present
-      if (text.startsWith("```json")) {
-        text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "");
-      } else if (text.startsWith("```")) {
-        text = text.replace(/^```\n?/, "").replace(/\n?```$/, "");
-      }
-
+      const text = response.candidates[0].content.parts[0].text ?? "{}";
       const result = JSON.parse(text.trim());
-      let msg: string = result.message || "I'm sorry, I'm having trouble processing that.";
-      // Guard against the model doubling the message string within the JSON value
-      const half = msg.length / 2;
-      if (Number.isInteger(half) && msg.slice(0, half) === msg.slice(half)) {
-        msg = msg.slice(0, half);
-      }
       return {
-        message: msg,
+        message: result.message || "I'm sorry, I'm having trouble processing that.",
         extractedData: result.extractedData,
         nextStage: result.nextStage as ChatStage,
         fallback: result.fallback
@@ -132,7 +114,7 @@ export class GeminiService {
 
       const ai = new GoogleGenAI({ apiKey });
       const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
         },
