@@ -29,7 +29,7 @@ export class GeminiService {
       const ai = new GoogleGenAI({ apiKey });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: [
           ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })),
           { role: 'user', parts: [{ text: `Current Stage: ${currentStage}\nCurrent Session Data: ${JSON.stringify(sessionData)}\nUser Message: ${message}` }] }
@@ -73,19 +73,7 @@ export class GeminiService {
         throw new Error("EMPTY_RESPONSE");
       }
 
-      let text = response.text;
-      if (!text) {
-        console.warn("Response text is empty, checking parts...");
-        const part = response.candidates[0].content.parts.find(p => p.text);
-        text = part?.text || "{}";
-      }
-      // Clean up markdown if present
-      if (text.startsWith("```json")) {
-        text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "");
-      } else if (text.startsWith("```")) {
-        text = text.replace(/^```\n?/, "").replace(/\n?```$/, "");
-      }
-
+      const text = response.candidates[0].content.parts[0].text ?? "{}";
       const result = JSON.parse(text.trim());
       return {
         message: result.message || "I'm sorry, I'm having trouble processing that.",
@@ -126,7 +114,7 @@ export class GeminiService {
 
       const ai = new GoogleGenAI({ apiKey });
       const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
         },

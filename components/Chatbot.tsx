@@ -88,39 +88,29 @@ const Chatbot: React.FC = () => {
         : '';
 
     const emailBody = [
-      `=== NEW LEAD — SKYLINE ELITE REALTY ===`,
+      `New Lead - Skyline Elite Realty`,
+      `Lead Score: ${score}/10 (${scoreLabel.replace(/[^\w\s\/()]/g, '').trim()})`,
       ``,
-      `LEAD SCORE: ${score}/10  ${scoreLabel}`,
+      `Customer Details`,
+      `Name: ${data.name || 'Not provided'}`,
+      `Phone: ${data.phone || 'Not provided'}`,
+      `Email: ${data.email || 'Not provided'}`,
       ``,
-      `--- CUSTOMER DETAILS ---`,
-      `Name:               ${data.name || 'Not provided'}`,
-      `Phone:              ${data.phone || 'Not provided'}`,
-      `Email:              ${data.email || 'Not provided'}`,
-      ``,
-      `--- REAL ESTATE INTENT ---`,
-      `Intent:             ${data.intent || 'Not specified'}`,
-      `Location:           ${data.location || 'Not specified'}`,
-      `Budget:             ${data.budget || 'Not specified'}`,
-      `Timeline:           ${data.timeline || 'Not specified'}`,
+      `Real Estate Intent`,
+      `Intent: ${data.intent || 'Not specified'}`,
+      `Location: ${data.location || 'Not specified'}`,
+      `Budget: ${data.budget || 'Not specified'}`,
+      `Timeline: ${data.timeline || 'Not specified'}`,
       intentExtras ? intentExtras : null,
       `Listing Preference: ${data.listingPreference || 'Not specified'}`,
       ``,
-      `--- CONTACT PREFERENCE ---`,
-      `Preferred Method:   ${data.contactPreference || 'Not specified'}`,
-      `Best Time to Call:  ${data.bestTime || 'Not specified'}`,
-      ``,
-      `--- SCORING BREAKDOWN ---`,
-      `Intent provided:    ${data.intent ? '+2' : '0'}`,
-      `Location provided:  ${data.location ? '+1' : '0'}`,
-      `Budget provided:    ${data.budget ? '+2' : '0'}`,
-      `Timeline urgency:   ${data.timeline ? (/\b(immediate|asap|now|soon|this month|this week|1 month|2 month|3 month|quickly)\b/i.test(data.timeline) ? '+2 (urgent)' : '+1') : '0'}`,
-      `Phone provided:     ${data.phone ? '+1' : '0'}`,
-      `Email provided:     ${data.email ? '+1' : '0'}`,
-      `Best time given:    ${data.bestTime ? '+1' : '0'}`,
-      `TOTAL:              ${score}/10`,
+      `Contact Preference`,
+      `Preferred Method: ${data.contactPreference || 'Not specified'}`,
+      `Best Time to Contact: ${data.bestTime || 'Not specified'}`,
     ].filter(line => line !== null).join('\n');
 
-    const accessKey = (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    const accessKey = process.env.VITE_WEB3FORMS_KEY || (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    console.log('Web3Forms key available:', !!accessKey, accessKey ? `(${accessKey.substring(0, 8)}...)` : '(empty)');
     if (!accessKey) {
       console.warn('Web3Forms access key not configured (VITE_WEB3FORMS_KEY). Skipping email.');
       return;
@@ -131,18 +121,8 @@ const Chatbot: React.FC = () => {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         access_key: accessKey,
-        subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
-        name: data.name || 'Not provided',
-        phone: data.phone || 'Not provided',
-        email: data.email || 'concierge@skylineelite.nyc',
-        lead_score: `${score}/10 — ${scoreLabel}`,
-        intent: data.intent || 'Not specified',
-        location: data.location || 'Not specified',
-        budget: data.budget || 'Not specified',
-        timeline: data.timeline || 'Not specified',
-        contact_preference: data.contactPreference || 'Not specified',
-        best_time_to_contact: data.bestTime || 'Not specified',
-        additional_details: intentExtras || 'N/A',
+        subject: `New Lead: ${data.name || 'Unknown'} - ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'} (Score: ${score}/10)`,
+        from_name: 'Skyline Elite Realty Chatbot',
         message: emailBody,
       }),
     })
@@ -168,7 +148,8 @@ const Chatbot: React.FC = () => {
     try {
       // Include the hardcoded welcome greeting in history preceded by a synthetic
       // user opener (Gemini requires history to start with a user turn).
-      // This tells Gemini the greeting was already shown so it doesn't repeat it.
+      // Note: messages still has OLD state here (setMessages is async),
+      // so this does not include the user's current input.
       const historyForApi = [
         { role: 'user' as const, text: 'Hello' },
         ...messages,
