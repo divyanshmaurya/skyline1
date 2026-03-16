@@ -120,7 +120,8 @@ const Chatbot: React.FC = () => {
       `TOTAL:              ${score}/10`,
     ].filter(line => line !== null).join('\n');
 
-    const accessKey = (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    const accessKey = process.env.VITE_WEB3FORMS_KEY || (import.meta as any).env?.VITE_WEB3FORMS_KEY;
+    console.log('Web3Forms key available:', !!accessKey, accessKey ? `(${accessKey.substring(0, 8)}...)` : '(empty)');
     if (!accessKey) {
       console.warn('Web3Forms access key not configured (VITE_WEB3FORMS_KEY). Skipping email.');
       return;
