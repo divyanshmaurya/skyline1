@@ -163,9 +163,13 @@ const Chatbot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Skip messages[0] (hardcoded initial greeting) — it was never sent to Gemini,
-      // so including it causes Gemini to echo/repeat it in its next response.
-      const historyForApi = messages.slice(1);
+      // Include the hardcoded welcome greeting in history preceded by a synthetic
+      // user opener (Gemini requires history to start with a user turn).
+      // This tells Gemini the greeting was already shown so it doesn't repeat it.
+      const historyForApi = [
+        { role: 'user' as const, text: 'Hello' },
+        ...messages,
+      ];
       const response = await gemini.processMessage(userText, stage, sessionData, historyForApi);
 
       const mergedData = { ...sessionData, ...response.extractedData };
