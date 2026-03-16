@@ -73,10 +73,11 @@ export class GeminiService {
         throw new Error("EMPTY_RESPONSE");
       }
 
-      // Use only the first text part — response.text concatenates ALL parts,
-      // which can cause doubled output with structured JSON responses.
-      const firstPart = response.candidates?.[0]?.content?.parts?.find(p => p.text);
-      let text = firstPart?.text || response.text || "{}";
+      // gemini-2.5-flash is a thinking model — it returns thought parts alongside
+      // the actual response. Exclude thought parts and take the JSON text part.
+      const parts = response.candidates[0].content.parts;
+      const jsonPart = parts.find(p => p.text && !p.thought && p.text.trim().startsWith('{'));
+      let text = jsonPart?.text ?? parts.find(p => p.text && !p.thought)?.text ?? "{}";
       // Clean up markdown if present
       if (text.startsWith("```json")) {
         text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "");
