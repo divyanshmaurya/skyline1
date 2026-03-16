@@ -146,10 +146,13 @@ const Chatbot: React.FC = () => {
         message: emailBody,
       }),
     })
-      .then(res => res.json())
+      .then(res => {
+        console.log('Web3Forms HTTP status:', res.status);
+        return res.json();
+      })
       .then(res => {
         if (res.success) console.log('Lead notification email sent successfully.');
-        else console.error('Web3Forms error:', res);
+        else console.error('Web3Forms error response:', JSON.stringify(res));
       })
       .catch(err => console.error('Failed to send lead notification email:', err));
   };
@@ -181,8 +184,12 @@ const Chatbot: React.FC = () => {
 
       setMessages(prev => [...prev, { role: 'model', text: response.message }]);
 
-      // Fire email as soon as bestTime is captured for the first time
-      if (response.extractedData?.bestTime && !sessionData.bestTime) {
+      // Fire email as soon as phone is captured for the first time
+      if (response.extractedData?.phone && !sessionData.phone) {
+        triggerAgentNotification(mergedData);
+      }
+      // Also fire when bestTime is captured (in case phone was already sent)
+      if (response.extractedData?.bestTime && !sessionData.bestTime && sessionData.phone) {
         triggerAgentNotification(mergedData);
       }
 
