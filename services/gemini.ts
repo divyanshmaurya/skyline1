@@ -35,6 +35,7 @@ export class GeminiService {
           { role: 'user', parts: [{ text: `Current Stage: ${currentStage}\nCurrent Session Data: ${JSON.stringify(sessionData)}\nUser Message: ${message}` }] }
         ],
         config: {
+          thinkingConfig: { thinkingBudget: 0 },
           systemInstruction: CHATBOT_FLOW_INSTRUCTION + "\n\nIMPORTANT: You must return a valid JSON object. Do not include any markdown formatting in your response.",
           responseMimeType: "application/json",
           responseSchema: {
