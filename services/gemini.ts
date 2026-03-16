@@ -86,8 +86,14 @@ export class GeminiService {
       }
 
       const result = JSON.parse(text.trim());
+      let msg: string = result.message || "I'm sorry, I'm having trouble processing that.";
+      // Guard against the model doubling the message string within the JSON value
+      const half = msg.length / 2;
+      if (Number.isInteger(half) && msg.slice(0, half) === msg.slice(half)) {
+        msg = msg.slice(0, half);
+      }
       return {
-        message: result.message || "I'm sorry, I'm having trouble processing that.",
+        message: msg,
         extractedData: result.extractedData,
         nextStage: result.nextStage as ChatStage,
         fallback: result.fallback
