@@ -134,7 +134,7 @@ const Chatbot: React.FC = () => {
         subject: `[${scoreLabel}] New Lead: ${data.name || 'Unknown'} — ${data.intent || 'Unknown Intent'} in ${data.location || 'Unknown Location'}`,
         name: data.name || 'Not provided',
         phone: data.phone || 'Not provided',
-        email: data.email || 'Not provided',
+        email: data.email || 'concierge@skylineelite.nyc',
         lead_score: `${score}/10 — ${scoreLabel}`,
         intent: data.intent || 'Not specified',
         location: data.location || 'Not specified',
