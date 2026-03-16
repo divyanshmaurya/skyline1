@@ -169,7 +169,8 @@ const Chatbot: React.FC = () => {
     try {
       // Include the hardcoded welcome greeting in history preceded by a synthetic
       // user opener (Gemini requires history to start with a user turn).
-      // This tells Gemini the greeting was already shown so it doesn't repeat it.
+      // Note: messages still has OLD state here (setMessages is async),
+      // so this does not include the user's current input.
       const historyForApi = [
         { role: 'user' as const, text: 'Hello' },
         ...messages,

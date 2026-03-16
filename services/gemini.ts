@@ -73,12 +73,10 @@ export class GeminiService {
         throw new Error("EMPTY_RESPONSE");
       }
 
-      let text = response.text;
-      if (!text) {
-        console.warn("Response text is empty, checking parts...");
-        const part = response.candidates[0].content.parts.find(p => p.text);
-        text = part?.text || "{}";
-      }
+      // Use only the first text part — response.text concatenates ALL parts,
+      // which can cause doubled output with structured JSON responses.
+      const firstPart = response.candidates?.[0]?.content?.parts?.find(p => p.text);
+      let text = firstPart?.text || response.text || "{}";
       // Clean up markdown if present
       if (text.startsWith("```json")) {
         text = text.replace(/^```json\n?/, "").replace(/\n?```$/, "");
