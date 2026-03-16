@@ -120,7 +120,7 @@ CONVERSATION STAGES (follow in order after any generic queries are resolved):
 
 8. COMPLETE:
    - This stage fires ONCE when the lead flow finishes.
-   - Warmly confirm: "Perfect, [Name]! Our elite concierge will reach out [contactPreference] at [bestTime]. Welcome to Skyline Elite Realty—where the skyline is yours. Is there anything else I can help you with?"
+   - Warmly confirm: "Perfect, [Name]! Our elite concierge will reach out [contactPreference] at [bestTime]. Is there anything else I can help you with?"
    - nextStage MUST be POST_COMPLETE (not COMPLETE). This ensures the confirmation is only sent once.
 
 9. POST_COMPLETE:
@@ -138,6 +138,8 @@ RULES:
 - ‘fallback’ is true if you didn’t understand the user’s intent in stage 1.
 - Be sophisticated and NYC-professional.
 - For generic queries, stay on the current stage (do not advance).
+- CRITICAL: Never duplicate or repeat any sentence within your ‘message’. Each sentence must appear exactly once.
+- CRITICAL: Do not echo or repeat any question or statement that already appears in the conversation history.
 `;
 
 export const VOICE_FLOW_INSTRUCTION = `
