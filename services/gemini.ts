@@ -79,8 +79,16 @@ export class GeminiService {
     const text = response.candidates[0].content.parts[0].text ?? "{}";
     const result = JSON.parse(text.trim());
 
+    // Gemini occasionally doubles the message string inside the JSON value.
+    // Detect and strip exact repetitions of any length.
+    let msg: string = result.message || "I'm sorry, I'm having trouble processing that.";
+    const half = msg.length / 2;
+    if (Number.isInteger(half) && half > 0 && msg.slice(0, half) === msg.slice(half)) {
+      msg = msg.slice(0, half);
+    }
+
     return {
-      message: result.message || "I'm sorry, I'm having trouble processing that.",
+      message: msg,
       extractedData: result.extractedData,
       nextStage: result.nextStage as ChatStage,
       fallback: result.fallback,
